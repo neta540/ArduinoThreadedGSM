@@ -2,7 +2,7 @@
   "name": "ArduinoThreadedGSM",
   "keywords": "gsm, sim800, sim900, sms, sim800l",
   "description": "Non-blocking Arduino GSM Library with SMS support",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "repository":
   {
     "type": "git",
