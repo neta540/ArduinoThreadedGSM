@@ -74,7 +74,7 @@ ThreadedGSM::SendMessageResult outbox;
 do{
 	modem.loop();
     outbox = modem.checkOutbox();
-}while(outbox != SMS_SEND_WAIT);
+}while(outbox != ThreadedGSM::SMS_SEND_WAIT);
 ```
 
 Project hosted on GitHub: [https://github.com/neta540/ArduinoThreadedGSM](https://github.com/neta540/ArduinoThreadedGSM).
