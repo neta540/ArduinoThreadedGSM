@@ -47,8 +47,34 @@ void loop()
   ThreadedGSM::SignalLevel Signal;
   if(modem.readSignal(Signal))
   { /* your code */ }
-  
 }
+```
+
+To send SMS messages, request to send them using sendSMS:
+```c++
+modem.sendSMS(PDU); // PDU as String, hexadecimal
+```
+and *always* make sure to check whether message was sent successfuly:
+```c++
+void loop()
+{
+	modem.loop();
+    ThreadedGSM::SendMessageResult outbox = modem.checkOutbox();
+	if(outbox == SMS_SEND_OK)
+    { /* message was sent */ }
+    else if(outbox == SMS_SEND_FAIL)
+    { /* message sending failed */ }
+    else { /* keep waiting */ }
+}
+```
+It is also possible to use a blocking code, as follows:
+```c++
+modem.sendSMS(PDU);
+ThreadedGSM::SendMessageResult outbox;
+do{
+	modem.loop();
+    outbox = modem.checkOutbox();
+}while(outbox != SMS_SEND_WAIT);
 ```
 
 Project hosted on GitHub: [https://github.com/neta540/ArduinoThreadedGSM](https://github.com/neta540/ArduinoThreadedGSM).
