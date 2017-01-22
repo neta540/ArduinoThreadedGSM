@@ -58,13 +58,13 @@ and *always* make sure to check whether message was sent successfuly:
 ```c++
 void loop()
 {
-	modem.loop();
-    ThreadedGSM::SendMessageResult outbox = modem.checkOutbox();
-	if(outbox == SMS_SEND_OK)
-    { /* message was sent */ }
-    else if(outbox == SMS_SEND_FAIL)
-    { /* message sending failed */ }
-    else { /* keep waiting */ }
+  modem.loop();
+  ThreadedGSM::SendMessageResult outbox = modem.checkOutbox();
+  if(outbox == ThreadedGSM::SMS_SEND_OK)
+  { /* message was sent */ }
+  else if(outbox == ThreadedGSM::SMS_SEND_FAIL)
+  { /* message sending failed */ }
+  else { /* keep waiting */ }
 }
 ```
 It is also possible to use a blocking code, as follows:
@@ -72,8 +72,8 @@ It is also possible to use a blocking code, as follows:
 modem.sendSMS(PDU);
 ThreadedGSM::SendMessageResult outbox;
 do{
-	modem.loop();
-    outbox = modem.checkOutbox();
+  modem.loop();
+  outbox = modem.checkOutbox();
 }while(outbox != ThreadedGSM::SMS_SEND_WAIT);
 ```
 
