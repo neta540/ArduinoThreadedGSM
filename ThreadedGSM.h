@@ -73,6 +73,12 @@ public:
 		int Dbm;
 		int Value;
 	};
+	enum SendMessageResult
+	{
+		SMS_SEND_OK,
+		SMS_SEND_FAIL,
+		SMS_SEND_WAIT
+	};
 protected:
 private:
 	enum StartupStateE
@@ -294,18 +300,21 @@ public:
 			State.syncClockState = CLOCK_IDLE;
 		return false;
 	}
-	bool sendSMS()
+	SendMessageResult checkOutbox()
 	{
 		if(State.sendMessageState == SEND_OK)
 		{
 			State.sendMessageState = SEND_IDLE;
-			return true;
+			return SMS_SEND_OK;
 		}else if(State.sendMessageState == SEND_FAIL)
+		{
 			State.sendMessageState = SEND_IDLE;
-		return false;
+			return SMS_SEND_FAIL;
+		}
+		return SMS_SEND_WAIT;
 	}
 	// Requests
-	bool RequestSendSMS(String& PDU)
+	bool sendSMS(String& PDU)
 	{
 		if((State.sendMessageState == SEND_IDLE) || (State.sendMessageState == SEND_OK))
 		{
@@ -544,7 +553,7 @@ private:
 			case READ_FAIL:
 				break;
 			case READ_REQ:
-				SMS.InboxMsgContents	= "";
+				SMS.InboxMsgContents = "";
 				dte.SendCommand("AT+CMGF=0\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
 				State.readMsgState = READ_CHK_CMGF;
 				break;
@@ -559,7 +568,7 @@ private:
 			case READ_CHK_CPMS:
 				if(dte.getResult() == DTE::EXPECT_RESULT)
 				{
-					CMD	= "AT+CMGL=";
+					CMD = "AT+CMGL=";
 					CMD += (int)Message.ListMsgType;
 					CMD += "\r";
 					dte.SendCommand(CMD.c_str(), THREADEDGSM_AT_TIMEOUT, ",");
@@ -656,9 +665,9 @@ private:
 						smsc_len_b = SMS.OutboxMsgContents.charAt(i);
 						if (smsc_len_b >= '0' && smsc_len_b <= '9')
 							smsc_length |= smsc_len_b - '0';
-	        	else if (smsc_len_b >= 'a' && smsc_len_b <='f')
+						else if (smsc_len_b >= 'a' && smsc_len_b <='f')
 							smsc_length |= smsc_len_b - 'a' + 10;
-	        	else if (smsc_len_b >= 'A' && smsc_len_b <='F')
+						else if (smsc_len_b >= 'A' && smsc_len_b <='F')
 							smsc_length |= smsc_len_b - 'A' + 10;
 						smsc_length = smsc_length<<4;
 					}
