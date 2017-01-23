@@ -12,12 +12,11 @@ Use this library to:
 Initialize modem:
 
 ```c++
-ThreadedGSM modem(Serial1, 8, 9);
+ThreadedGSM modem(Serial1);
 ...
 void setup()
 {
 	modem.begin();
-	while(!modem.ready()) modem.loop();
 }
 ```
 Set automatic intervals for syncing clock and signal levels:
@@ -26,27 +25,45 @@ modem.setInterval(ThreadedGSM::INTERVAL_CLOCK, 60000);
 modem.setInterval(ThreadedGSM::INTERVAL_SIGNAL, 60000);
 modem.setInterval(ThreadedGSM::INTERVAL_INBOX, 30000);
 ```
-and finally, let the modem loop as a thread in your Arduino loop(), and look for Signal, Clock and Incoming SMS:
+Create your event handlers
+```c++
+void clock(ThreadedGSM& modem, ThreadedGSM::NetworkTime& Time)
+{
+	/* Network time */
+}
+
+void signal(ThreadedGSM& modem, ThreadedGSM::SignalLevel& Signal)
+{
+	/* Signal */
+}
+
+void sms(ThreadedGSM& modem, String& Msg)
+{
+	/* Message received in PDU  */
+}
+
+void startup(ThreadedGSM& modem)
+{
+	/* READY */
+}
+```
+Set event handlers for modem events as you like:
+```c++
+modem.setHandlers({
+	.signal = signal,
+	.clock = clock,
+	.incoming = sms,
+	.ready = startup,
+	.outgoing = NULL,
+	.power = NULL
+});
+```
+and finally, let the modem loop as a thread in your Arduino loop()
 ```c++
 void loop()
 { 
   // "Non-blocking" loop
   modem.loop();
-  
-  // Read SMS
-  String PDU;
-  if(modem.readSMS(PDU))
-  { /* Incoming SMS */ }
-  
-  // Network time
-  ThreadedGSM::NetworkTime Time;
-  if(modem.readClock(Time))
-  { /* your code */ }
-  
-  // Signal results
-  ThreadedGSM::SignalLevel Signal;
-  if(modem.readSignal(Signal))
-  { /* your code */ }
 }
 ```
 
@@ -54,27 +71,9 @@ To send SMS messages, request to send them using sendSMS:
 ```c++
 modem.sendSMS(PDU); // PDU as String, hexadecimal
 ```
-and *always* make sure to check whether message was sent successfuly:
-```c++
-void loop()
-{
-  modem.loop();
-  ThreadedGSM::SendMessageResult outbox = modem.checkOutbox();
-  if(outbox == ThreadedGSM::SMS_SEND_OK)
-  { /* message was sent */ }
-  else if(outbox == ThreadedGSM::SMS_SEND_FAIL)
-  { /* message sending failed */ }
-  else { /* keep waiting */ }
-}
-```
-It is also possible to use a blocking code, as follows:
-```c++
-modem.sendSMS(PDU);
-ThreadedGSM::SendMessageResult outbox;
-do{
-  modem.loop();
-  outbox = modem.checkOutbox();
-}while(outbox != ThreadedGSM::SMS_SEND_WAIT);
-```
+*Don't forget to check whether your messages were sent successfuly, before sending more.*
+
+*Use power event callbacks to set modem pins (EN/RST) on power on/off when needed*
+
 
 Project hosted on GitHub: [https://github.com/neta540/ArduinoThreadedGSM](https://github.com/neta540/ArduinoThreadedGSM).

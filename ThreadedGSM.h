@@ -79,6 +79,21 @@ public:
 		SMS_SEND_FAIL,
 		SMS_SEND_WAIT
 	};
+	typedef void (*ThreadedGSMCallbackSignal)(ThreadedGSM&, SignalLevel&);
+	typedef void (*ThreadedGSMCallbackClock)(ThreadedGSM&, NetworkTime&);
+	typedef void (*ThreadedGSMCallbackIncomingSMS)(ThreadedGSM&, String&);
+	typedef void (*ThreadedGSMCallbackOutgoingSMS)(ThreadedGSM&, bool);
+	typedef void (*ThreadedGSMCallbackBool)(ThreadedGSM&, bool);
+	typedef void (*ThreadedGSMCallback)(ThreadedGSM&);
+	struct conf
+	{
+		ThreadedGSMCallbackSignal signal;
+		ThreadedGSMCallbackClock clock;
+		ThreadedGSMCallbackIncomingSMS incoming;
+		ThreadedGSMCallback ready;
+		ThreadedGSMCallbackOutgoingSMS outgoing;
+		ThreadedGSMCallbackBool power;
+	};
 protected:
 private:
 	enum StartupStateE
@@ -162,12 +177,6 @@ private:
 		String OutboxMsgContents;
 	}SMS;
 
-	struct
-	{
-		int pin_en;
-		int pin_reset;
-	}IO;
-
 	SignalLevel GsmSignal;
 
 	NetworkTime ClockTime;
@@ -176,12 +185,13 @@ private:
 
 	unsigned long tickSync[THREADEDGSM_INTERVAL_COUNT];
 	unsigned long Intervals[THREADEDGSM_INTERVAL_COUNT];
+
+	// callbacks
+	conf configuration = {NULL, NULL, NULL, NULL, NULL, NULL};
 //functions
 public:
-	ThreadedGSM(Stream& stream, int PinEN, int PinRST) : stream(stream), dte(stream, THREADEDGSM_DTE_BUFFER_SIZE)
+	ThreadedGSM(Stream& stream) : stream(stream), dte(stream, THREADEDGSM_DTE_BUFFER_SIZE)
 	{
-		IO.pin_reset = PinRST;
-		IO.pin_en = PinEN;
 		State.startupState = STARTUP_UNINITIALIZED;
 		State.syncClockState = CLOCK_IDLE;
 		State.readSignalState = SIGNAL_IDLE;
@@ -190,12 +200,15 @@ public:
 		ClockTime.year = 2000;
 		ClockTime.month = ClockTime.day = 1;
 		ClockTime.hour = ClockTime.minute = ClockTime.second = 0;
-		digitalWrite(IO.pin_en, true);
-		digitalWrite(IO.pin_reset, false);
 		for(int i=0;i<THREADEDGSM_INTERVAL_COUNT;i++)
 			Intervals[i] = 0;
+
 	}
 	~ThreadedGSM(){};
+	void setHandlers(conf config)
+	{
+		this->configuration = config;
+	}
 	void setInterval(IntervalSourceE source, unsigned long interval)
 	{
 		Intervals[source] = interval;
@@ -206,12 +219,53 @@ public:
 	{
 		State.startupState = STARTUP_POWER_OFF;
 	}
-	bool ready()
-	{
-		return (State.startupState == STARTUP_OK);
-	}
 	// Call this function for executing thread
 	void loop()
+	{
+		loop2();
+		events();
+	}
+	// Requests
+	bool sendSMS(String& PDU)
+	{
+		if((State.sendMessageState == SEND_IDLE))
+		{
+			State.sendMessageState = SEND_REQ;
+			SMS.OutboxMsgContents = PDU;
+			return true;
+		}
+		return false;
+	}
+protected:
+private:
+	void events()
+	{
+		if((State.readSignalState == SIGNAL_OK) || (State.readSignalState == SIGNAL_OK))
+		{
+			if((this->configuration.signal != NULL) && (State.readSignalState == SIGNAL_OK))
+				this->configuration.signal(*this, GsmSignal);
+			State.readSignalState = SIGNAL_IDLE;
+		}
+		if((State.syncClockState == CLOCK_OK) || (State.syncClockState == CLOCK_FAIL))
+		{
+			if((this->configuration.clock != NULL) && (State.syncClockState == CLOCK_OK))
+				this->configuration.clock(*this, ClockTime);
+			State.syncClockState = CLOCK_IDLE;
+		}
+		if((State.readMsgState == READ_OK) || (State.readMsgState == READ_FAIL))
+		{
+			if((this->configuration.incoming != NULL) && (State.readMsgState == READ_OK))
+				this->configuration.incoming(*this, SMS.InboxMsgContents);
+			State.readMsgState = READ_IDLE;
+		}
+		if((State.sendMessageState == SEND_OK) || (State.sendMessageState == SEND_FAIL))
+		{
+			if(this->configuration.outgoing != NULL)
+				this->configuration.outgoing(*this, State.sendMessageState == SEND_OK ? true : false);
+			State.sendMessageState = SEND_IDLE;
+		}
+	}
+	void loop2()
 	{
 		if(State.startupState == STARTUP_UNINITIALIZED) return;
 		if(dte.getIsBusy()) return;
@@ -267,70 +321,10 @@ public:
 			return;
 		}
 	}
-	bool readSMS(String& PDU)
-	{
-		if(State.readMsgState == READ_OK)
-		{
-			State.readMsgState = READ_IDLE;
-			PDU = SMS.InboxMsgContents;
-			return true;
-		}else if(State.readMsgState == READ_FAIL)
-			State.readMsgState = READ_IDLE;
-		return false;
-	}
-	bool readSignal(SignalLevel& Signal)
-	{
-		if(State.readSignalState == SIGNAL_OK)
-		{
-			State.readSignalState = SIGNAL_IDLE;
-			Signal = GsmSignal;
-			return true;
-		}else if(State.readSignalState == SIGNAL_FAIL)
-			State.readSignalState = SIGNAL_IDLE;
-		return false;
-	}
-	bool readClock(NetworkTime& Time)
-	{
-		if(State.syncClockState == CLOCK_OK)
-		{
-			State.syncClockState = CLOCK_IDLE;
-			Time = ClockTime;
-			return true;
-		}else if(State.syncClockState == CLOCK_FAIL)
-			State.syncClockState = CLOCK_IDLE;
-		return false;
-	}
-	SendMessageResult checkOutbox()
-	{
-		if(State.sendMessageState == SEND_OK)
-		{
-			State.sendMessageState = SEND_IDLE;
-			return SMS_SEND_OK;
-		}else if(State.sendMessageState == SEND_FAIL)
-		{
-			State.sendMessageState = SEND_IDLE;
-			return SMS_SEND_FAIL;
-		}
-		return SMS_SEND_WAIT;
-	}
-	// Requests
-	bool sendSMS(String& PDU)
-	{
-		if((State.sendMessageState == SEND_IDLE) || (State.sendMessageState == SEND_OK))
-		{
-			State.sendMessageState = SEND_REQ;
-			SMS.OutboxMsgContents = PDU;
-			return true;
-		}
-		return false;
-	}
-
-protected:
-private:
 	// Requests
 	bool RequestReadMessage(ReadMessagesListTypeE type)
 	{
-		if( (State.readMsgState == READ_IDLE) || (State.readMsgState == READ_OK))
+		if( (State.readMsgState == READ_IDLE) )
 		{
 			State.readMsgState = READ_REQ;
 			Message.ListMsgType = type;
@@ -340,7 +334,7 @@ private:
 	}
 	bool RequestSyncClock()
 	{
-		if( (State.syncClockState == CLOCK_IDLE) || (State.syncClockState == CLOCK_OK))
+		if( (State.syncClockState == CLOCK_IDLE))
 		{
 			State.syncClockState = CLOCK_REQ;
 			return true;
@@ -349,7 +343,7 @@ private:
 	}
 	bool RequestReadSignal()
 	{
-		if((State.readSignalState == SIGNAL_IDLE) || (State.readSignalState == SIGNAL_OK))
+		if((State.readSignalState == SIGNAL_IDLE))
 		{
 			State.readSignalState = SIGNAL_REQ;
 			return true;
@@ -366,7 +360,8 @@ private:
 			case STARTUP_OK:
 				break;
 			case STARTUP_POWER_OFF:
-				digitalWrite(IO.pin_en, true);
+				if(this->configuration.power != NULL)
+					this->configuration.power(*this, false);
 				tick = millis();
 				State.startupState = STARTUP_POWER_OFF_DELAY;
 				break;
@@ -375,7 +370,8 @@ private:
 					State.startupState = STARTUP_POWER_ON;
 				break;
 			case STARTUP_POWER_ON:
-				digitalWrite(IO.pin_en, false);
+				if(this->configuration.power != NULL)
+					this->configuration.power(*this, true);
 				// begin delay
 				tick = millis();
 				State.startupState = STARTUP_DELAY;
@@ -437,6 +433,8 @@ private:
 				{
 					RequestSyncClock();
 					RequestReadSignal();
+					if(this->configuration.ready != NULL)
+						this->configuration.ready(*this);
 					State.startupState = STARTUP_OK;
 				}else
 					State.startupState = STARTUP_POWER_OFF;
@@ -519,7 +517,7 @@ private:
 				int index = dte.getBuffer().indexOf("+CSQ: ");
 				if(index >= 0)
 				{
-					// parse clock
+					// parse signal
 					index+=6;
 					int tmpValue, tmpDbm;
 
