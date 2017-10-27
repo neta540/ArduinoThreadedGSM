@@ -261,6 +261,7 @@ public:
 	void sendSMS(String& PDU)
 	{
 		requests |= (REQ_OUTBOX);
+		SMS.OutboxMsgContents = PDU;
 	}
 protected:
 private:
