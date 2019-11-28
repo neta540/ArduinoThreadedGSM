@@ -561,6 +561,7 @@ private:
 					int smsc_length = 0;
 					for(int i=0;i<=1;i++)
 					{
+						smsc_length <<= 4;
 						smsc_len_b = SMS.OutboxMsgContents.charAt(i);
 						if (smsc_len_b >= '0' && smsc_len_b <= '9')
 							smsc_length |= smsc_len_b - '0';
@@ -568,10 +569,9 @@ private:
 							smsc_length |= smsc_len_b - 'a' + 10;
 						else if (smsc_len_b >= 'A' && smsc_len_b <='F')
 							smsc_length |= smsc_len_b - 'A' + 10;
-						smsc_length = smsc_length<<4;
 					}
 					CMD = "AT+CMGS=";
-					CMD += (SMS.OutboxMsgContents.length() / 2) - (1+smsc_length);
+					CMD += (SMS.OutboxMsgContents.length() / 2 - (smsc_length + 1));
 					CMD += "\r";
 					dte.SendCommand(CMD.c_str(), 15000, "> ");
 					state = SEND_CHK_RDY;
