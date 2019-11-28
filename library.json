@@ -2,14 +2,12 @@
   "name": "ArduinoThreadedGSM",
   "keywords": "gsm, sim800, sim900, sms, sim800l",
   "description": "Non-blocking Arduino GSM Library with SMS support",
-  "version": "0.9.1",
-  "repository":
-  {
+  "version": "0.9.2",
+  "repository": {
     "type": "git",
     "url": "https://github.com/neta540/ArduinoThreadedGSM.git"
   },
-  "authors":
-  [
+  "authors": [
     {
       "name": "Neta Yahav",
       "email": "neta540@gmail.com",
@@ -18,7 +16,5 @@
   ],
   "frameworks": "arduino",
   "platforms": "*",
-  "examples": [
-    "[Ee]xamples/*.cpp"
-  ]
+  "examples": ["[Ee]xamples/*.cpp"]
 }
