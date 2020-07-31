@@ -32,7 +32,7 @@ void signal(ThreadedGSM &modem, ThreadedGSM::SignalLevel &Signal) {
   SerialDebug.println(Signal.Value);
 }
 
-void sms(ThreadedGSM &modem, String &Msg) {
+void sms(ThreadedGSM &modem, String &Msg, String &Number) {
   SerialDebug.print("Received SMS: ");
   SerialDebug.println(Msg);
 }
