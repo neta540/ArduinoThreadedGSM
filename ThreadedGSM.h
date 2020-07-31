@@ -3,6 +3,7 @@
 *
 * Created: 20/09/2016 11:14:02
 * Author: Neta Yahav
+* Modified: 10/05/2020 By ChoN
 */
 
 
@@ -14,9 +15,9 @@
 
 // Defaults
 #define THREADEDGSM_DEF_DTE_BUF_SIZ		512
-#define THREADEDGSM_DEF_AT_TIMEOUT		5000
-#define THREADEDGSM_DEF_STA_PON				10000
-#define THREADEDGSM_DEF_STA_POF				1000
+#define THREADEDGSM_DEF_AT_TIMEOUT		2000//5000
+#define THREADEDGSM_DEF_STA_PON			15000//10000 - Le doy un poco mas de tiempo para que despues del reset levante el SIM
+#define THREADEDGSM_DEF_STA_POF			1000
 
 // Use custom values or default ones
 #ifndef THREADEDGSM_DTE_BUFFER_SIZE
@@ -32,14 +33,16 @@
 #define THREADEDGSM_STARTUP_POWER_OFF_DELAY THREADEDGSM_DEF_STA_POF
 #endif
 
-#define THREADEDGSM_INTERVAL_COUNT						3
+#define THREADEDGSM_INTERVAL_COUNT		3
+
+//#define THREADEDGSM_DEBUG
 
 #ifdef THREADEDGSM_DEBUG
-	#define DEBUG_PRINT(x)  THREADEDGSM_DEBUG.print (x)
-	#define DEBUG_PRINTLN(x)  THREADEDGSM_DEBUG.println (x)
+	#define DEBUG_GSM_PRINT(x)  	DEBUG_PRINT(x)
+	#define DEBUG_GSM_PRINTLN(x)  	DEBUG_PRINTLN(x)
 #else
-	#define DEBUG_PRINT(x)
-	#define DEBUG_PRINTLN(x)
+	#define DEBUG_GSM_PRINT(x)
+	#define DEBUG_GSM_PRINTLN(x)
 #endif
 
 class ThreadedGSM
@@ -66,7 +69,8 @@ public:
 	{
 		INTERVAL_CLOCK,
 		INTERVAL_INBOX,
-		INTERVAL_SIGNAL
+		INTERVAL_SIGNAL,
+		INTERVAL_GPRS
 	};
 	struct SignalLevel
 	{
@@ -76,7 +80,7 @@ public:
 
 	typedef void (*ThreadedGSMCallbackSignal)(ThreadedGSM&, SignalLevel&);
 	typedef void (*ThreadedGSMCallbackClock)(ThreadedGSM&, NetworkTime&);
-	typedef void (*ThreadedGSMCallbackIncomingSMS)(ThreadedGSM&, String&);
+	typedef void (*ThreadedGSMCallbackIncomingSMS)(ThreadedGSM&, String&, String&);
 	typedef void (*ThreadedGSMCallbackBool)(ThreadedGSM&, bool);
 	typedef void (*ThreadedGSMCallback)(ThreadedGSM&);
 	struct conf
@@ -141,10 +145,13 @@ private:
 		int Index;
 	}Message;
 
+	// SMS Data
 	struct
 	{
 		String InboxMsgContents;
+		String InboxNumber;
 		String OutboxMsgContents;
+		String OutboxNumber;
 	}SMS;
 
 	Stream& stream;
@@ -240,8 +247,8 @@ public:
 			if(job)
 			{
 				state = 0;
-				DEBUG_PRINT("Job ID: ");
-				DEBUG_PRINTLN(job);
+				DEBUG_GSM_PRINT("Job ID: ");
+				DEBUG_GSM_PRINTLN(job);
 			}
 		}
 
@@ -257,12 +264,26 @@ public:
 		else if(job == REQ_OUTBOX)
 			Outbox();
 	}
+	
 	// Requests
-	void sendSMS(String& PDU)
-	{
+
+	// Send SMS
+	void sendSMS(String& Number, String& Message){
 		requests |= (REQ_OUTBOX);
-		SMS.OutboxMsgContents = PDU;
+		SMS.OutboxMsgContents = Message;
+		SMS.OutboxNumber = Number;
 	}
+
+	// Get Number
+	void getNumber(String& Number){
+
+	}
+
+	// If return any different from 0, there is a job pending
+	int getBusy(){
+		return job;
+	}
+
 protected:
 private:
 
@@ -299,7 +320,7 @@ private:
 			case STARTUP_ENTER_AT:
 				if(dte.getResult() ==  DTE::EXPECT_RESULT)
 				{
-					dte.SendCommand("AT+CPIN?\r", 10000, "OK\r");
+					dte.SendCommand("AT+CPIN?\r", 10000, "OK\r");	// Estaba en 10000
 					state = STARTUP_CHK_CPIN;
 				}
 				else
@@ -318,8 +339,9 @@ private:
 					{
 						state = STARTUP_POWER_OFF;
 					}
-				}else
+				}else{
 					state = STARTUP_POWER_OFF;
+				}
 				break;
 			case STARTUP_CHK_CREG:
 				if(dte.getResult() == DTE::EXPECT_RESULT)
@@ -356,8 +378,8 @@ private:
 		}
 		if(state != lastState)
 		{
-				DEBUG_PRINT(F("STARTUP_STATE: "));
-				DEBUG_PRINTLN(state);
+				DEBUG_GSM_PRINT(F("STARTUP_STATE: "));
+				DEBUG_GSM_PRINTLN(state);
 		}
 	}
 
@@ -407,8 +429,8 @@ private:
 		}
 		if(state != lastState)
 		{
-				DEBUG_PRINT(F("CLOCK_STATE: "));
-				DEBUG_PRINTLN(state);
+				DEBUG_GSM_PRINT(F("CLOCK_STATE: "));
+				DEBUG_GSM_PRINTLN(state);
 		}
 	}
 	void Signal()
@@ -440,8 +462,8 @@ private:
 		}
 		if(state != lastState)
 		{
-				DEBUG_PRINT(F("SIGNAL_STATE: "));
-				DEBUG_PRINTLN(state);
+				DEBUG_GSM_PRINT(F("SIGNAL_STATE: "));
+				DEBUG_GSM_PRINTLN(state);
 		}
 	}
 	void clearReq(int req)
@@ -449,6 +471,8 @@ private:
 		requests &= ~(req);
 		nextJob();
 	}
+	
+	// Mensajes en formato de texto
 	void Inbox()
 	{
 		String CMD;
@@ -457,7 +481,7 @@ private:
 		{
 			case READ_REQ:
 				SMS.InboxMsgContents = "";
-				dte.SendCommand("AT+CMGF=0\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
+				dte.SendCommand("AT+CMGF=1\r", THREADEDGSM_AT_TIMEOUT, "OK\r");	//AT+CMGF=0 -> PDU, 1 -> Texto
 				state = READ_CHK_CMGF;
 				break;
 			case READ_CHK_CMGF:
@@ -471,10 +495,7 @@ private:
 			case READ_CHK_CPMS:
 				if(dte.getResult() == DTE::EXPECT_RESULT)
 				{
-					CMD = "AT+CMGL=";
-					CMD += (int) READ_TYPE_ALL;
-					CMD += "\r";
-					dte.SendCommand(CMD.c_str(), THREADEDGSM_AT_TIMEOUT, ",");
+					dte.SendCommand("AT+CMGL=\"ALL\"\r", THREADEDGSM_AT_TIMEOUT, ",");
 					state = READ_CHK_CMGL;
 				}
 				else clearReq(REQ_INBOX);
@@ -508,18 +529,53 @@ private:
 			case READ_CHK_CMGR:
 				if(dte.getResult() == DTE::EXPECT_RESULT)
 				{
+					// DEBUG_GSM_PRINTLN(dte.getBuffer());
+					// AT+CMGR=1
+					// +CMGR: "REC READ","+543516510632","Luciano","20/02/05,10:53:09-12"
+					// Hola
+
+					// OK
 					int indexStart = dte.getBuffer().indexOf("+CMGR: ");
 					if(indexStart >= 0)
 					{
-						int indexStartPDU = dte.getBuffer().indexOf("\r\n", indexStart);
-						if (indexStartPDU >= 0)
+						// int firstComa = dte.getBuffer().indexOf("\",\"", indexStart);
+						// int indexStartNumber = firstComa + 3;
+						// int secondComa = dte.getBuffer().indexOf("\",\"", indexStartNumber);
+						// int indexEndNumber = secondComa;
+						// String Number = dte.getBuffer().substring(indexStartNumber, indexEndNumber);
+						// DEBUG_GSM_PRINT("Number: ");
+						// DEBUG_GSM_PRINTLN(Number);
+						// int indexStartFrom = secondComa + 3;
+						// int thirdComa = dte.getBuffer().indexOf("\",\"", indexStartFrom);
+						// int indexEndFrom = thirdComa;
+						// String From = dte.getBuffer().substring(indexStartFrom, indexEndFrom);
+						// DEBUG_GSM_PRINT("From: ");
+						// DEBUG_GSM_PRINTLN(From);
+						// int indexStartDate = thirdComa + 3;
+						// int indexEndDate = dte.getBuffer().indexOf("\"", indexStartDate);
+						// String Date = dte.getBuffer().substring(indexStartDate, indexEndDate);
+						// DEBUG_GSM_PRINT("Date: ");
+						// DEBUG_GSM_PRINTLN(Date);
+
+						int indexStartNumber = dte.getBuffer().indexOf("\",\"", indexStart);
+						if(indexStartNumber >= 0){
+							indexStartNumber+=3;
+							int indexEndNumber = dte.getBuffer().indexOf("\",\"", indexStartNumber);
+							if(indexEndNumber >= 0){
+								SMS.InboxNumber = dte.getBuffer().substring(indexStartNumber, indexEndNumber);
+							}
+						}
+												
+						int indexStartTEXT = dte.getBuffer().indexOf("\r\n", indexStart);
+						if (indexStartTEXT >= 0)
 						{
-							indexStartPDU+=2;
-							int indexEndPDU = dte.getBuffer().indexOf("\r", indexStartPDU);
-							if(indexEndPDU >= 0)
-								SMS.InboxMsgContents = dte.getBuffer().substring(indexStartPDU, indexEndPDU);
+							indexStartTEXT+=2;
+							int indexEndTEXT = dte.getBuffer().indexOf("\r", indexStartTEXT);
+							if(indexEndTEXT >= 0)
+								SMS.InboxMsgContents = dte.getBuffer().substring(indexStartTEXT, indexEndTEXT);
 						}
 					}
+					// Borra el mensaje una vez leído
 					CMD = "AT+CMGD=";
 					CMD += Message.Index;
 					CMD += "\r";
@@ -532,18 +588,19 @@ private:
 				if( (dte.getResult() == DTE::EXPECT_RESULT) && (SMS.InboxMsgContents != ""))
 				{
 					if(this->configuration.incoming != NULL)
-						this->configuration.incoming(*this, SMS.InboxMsgContents);
+						this->configuration.incoming(*this, SMS.InboxNumber, SMS.InboxMsgContents);
 				}
 				clearReq(REQ_INBOX);
 				break;
 		}
 		if(state != lastState)
 		{
-				DEBUG_PRINT(F("INBOX_STATE: "));
-				DEBUG_PRINTLN(state);
+				DEBUG_GSM_PRINT(F("INBOX_STATE: "));
+				DEBUG_GSM_PRINTLN(state);
 		}
 	}
 
+	// Enviar SMS en modo texto
 	void Outbox()
 	{
 		String CMD;
@@ -551,28 +608,13 @@ private:
 		switch(state)
 		{
 			case SEND_REQ:
-				dte.SendCommand("AT+CMGF=0\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
+				dte.SendCommand("AT+CMGF=1\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
 				state = SEND_CHK_CMGF;
 				break;
 			case SEND_CHK_CMGF:
 				if(dte.getResult() == DTE::EXPECT_RESULT)
 				{
-					char smsc_len_b;
-					int smsc_length = 0;
-					for(int i=0;i<=1;i++)
-					{
-						smsc_length <<= 4;
-						smsc_len_b = SMS.OutboxMsgContents.charAt(i);
-						if (smsc_len_b >= '0' && smsc_len_b <= '9')
-							smsc_length |= smsc_len_b - '0';
-						else if (smsc_len_b >= 'a' && smsc_len_b <='f')
-							smsc_length |= smsc_len_b - 'a' + 10;
-						else if (smsc_len_b >= 'A' && smsc_len_b <='F')
-							smsc_length |= smsc_len_b - 'A' + 10;
-					}
-					CMD = "AT+CMGS=";
-					CMD += (SMS.OutboxMsgContents.length() / 2 - (smsc_length + 1));
-					CMD += "\r";
+					CMD = "AT+CMGS=\"" + SMS.OutboxNumber + "\"\r";
 					dte.SendCommand(CMD.c_str(), 15000, "> ");
 					state = SEND_CHK_RDY;
 				}
@@ -598,10 +640,11 @@ private:
 		}
 		if(state != lastState)
 		{
-				DEBUG_PRINT(F("OUTBOX_STATE: "));
-				DEBUG_PRINTLN(state);
+				DEBUG_GSM_PRINT(F("OUTBOX_STATE: "));
+				DEBUG_GSM_PRINTLN(state);
 		}
 	}
+
 }; //ThreadedGSM
 
 #endif //__THREADEDGSM_H__
