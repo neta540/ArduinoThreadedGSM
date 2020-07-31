@@ -6,7 +6,7 @@
 /*   By: Neta Yahav <neta540@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2016/09/20 11:14:02 by Neta Yahav        #+#    #+#             */
-/*   Updated: 2020/07/31 18:13:06 by Neta Yahav       ###   ########.fr       */
+/*   Updated: 2020/07/31 18:36:30 by Neta Yahav       ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,8 +18,8 @@
 
 // Defaults
 #define THREADEDGSM_DEF_DTE_BUF_SIZ 512
-#define THREADEDGSM_DEF_AT_TIMEOUT 5000
-#define THREADEDGSM_DEF_STA_PON 10000
+#define THREADEDGSM_DEF_AT_TIMEOUT 2000
+#define THREADEDGSM_DEF_STA_PON 15000
 #define THREADEDGSM_DEF_STA_POF 1000
 
 // Use custom values or default ones
