@@ -6,7 +6,7 @@
 /*   By: Neta Yahav <neta540@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/07/31 18:03:10 by Neta Yahav        #+#    #+#             */
-/*   Updated: 2020/07/31 18:10:20 by Neta Yahav       ###   ########.fr       */
+/*   Updated: 2020/07/31 19:06:03 by Neta Yahav       ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,7 @@ ThreadedGSM::ThreadedGSM(Stream &stream)
     Intervals[i] = 0;
 
   job = state = requests = 0;
+  format = MessageFormat::MSG_FMT_PDU;
 }
 
 ThreadedGSM::~ThreadedGSM() {}
@@ -93,6 +94,12 @@ void ThreadedGSM::loop() {
 void ThreadedGSM::sendSMS(String &PDU) {
   requests |= (REQ_OUTBOX);
   SMS.OutboxMsgContents = PDU;
+}
+
+void ThreadedGSM::sendTextSMS(String &Number, String &Message) {
+  requests |= (REQ_OUTBOX);
+  SMS.OutboxMsgContents = Message;
+  SMS.OutboxNumber = Number;
 }
 
 void ThreadedGSM::Startup() {
@@ -310,13 +317,37 @@ void ThreadedGSM::Inbox() {
     if (dte.getResult() == DTE::EXPECT_RESULT) {
       int indexStart = dte.getBuffer().indexOf("+CMGR: ");
       if (indexStart >= 0) {
-        int indexStartPDU = dte.getBuffer().indexOf("\r\n", indexStart);
-        if (indexStartPDU >= 0) {
-          indexStartPDU += 2;
-          int indexEndPDU = dte.getBuffer().indexOf("\r", indexStartPDU);
-          if (indexEndPDU >= 0)
-            SMS.InboxMsgContents =
-                dte.getBuffer().substring(indexStartPDU, indexEndPDU);
+        if (format == MessageFormat::MSG_FMT_PDU) {
+          int indexStartPDU = dte.getBuffer().indexOf("\r\n", indexStart);
+          if (indexStartPDU >= 0) {
+            indexStartPDU += 2;
+            int indexEndPDU = dte.getBuffer().indexOf("\r", indexStartPDU);
+            if (indexEndPDU >= 0) {
+              SMS.InboxNumber = "";
+              SMS.InboxMsgContents =
+                  dte.getBuffer().substring(indexStartPDU, indexEndPDU);
+            }
+          }
+        } else if (format == MessageFormat::MSG_FMT_TEXT) {
+          int indexStartNumber = dte.getBuffer().indexOf("\",\"", indexStart);
+          if (indexStartNumber >= 0) {
+            indexStartNumber += 3;
+            int indexEndNumber =
+                dte.getBuffer().indexOf("\",\"", indexStartNumber);
+            if (indexEndNumber >= 0) {
+              SMS.InboxNumber =
+                  dte.getBuffer().substring(indexStartNumber, indexEndNumber);
+            }
+          }
+
+          int indexStartTEXT = dte.getBuffer().indexOf("\r\n", indexStart);
+          if (indexStartTEXT >= 0) {
+            indexStartTEXT += 2;
+            int indexEndTEXT = dte.getBuffer().indexOf("\r", indexStartTEXT);
+            if (indexEndTEXT >= 0)
+              SMS.InboxMsgContents =
+                  dte.getBuffer().substring(indexStartTEXT, indexEndTEXT);
+          }
         }
       }
       CMD = "AT+CMGD=";
@@ -331,7 +362,8 @@ void ThreadedGSM::Inbox() {
     if ((dte.getResult() == DTE::EXPECT_RESULT) &&
         (SMS.InboxMsgContents != "")) {
       if (this->configuration.incoming != NULL)
-        this->configuration.incoming(*this, SMS.InboxMsgContents);
+        this->configuration.incoming(*this, SMS.InboxMsgContents,
+                                     SMS.InboxNumber);
     }
     clearReq(REQ_INBOX);
     break;
@@ -347,26 +379,33 @@ void ThreadedGSM::Outbox() {
   int lastState = state;
   switch (state) {
   case SEND_REQ:
-    dte.SendCommand("AT+CMGF=0\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
+    if (format == MessageFormat::MSG_FMT_PDU)
+      dte.SendCommand("AT+CMGF=0\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
+    else if (format == MessageFormat::MSG_FMT_TEXT)
+      dte.SendCommand("AT+CMGF=1\r", THREADEDGSM_AT_TIMEOUT, "OK\r");
     state = SEND_CHK_CMGF;
     break;
   case SEND_CHK_CMGF:
     if (dte.getResult() == DTE::EXPECT_RESULT) {
-      char smsc_len_b;
-      int smsc_length = 0;
-      for (int i = 0; i <= 1; i++) {
-        smsc_length <<= 4;
-        smsc_len_b = SMS.OutboxMsgContents.charAt(i);
-        if (smsc_len_b >= '0' && smsc_len_b <= '9')
-          smsc_length |= smsc_len_b - '0';
-        else if (smsc_len_b >= 'a' && smsc_len_b <= 'f')
-          smsc_length |= smsc_len_b - 'a' + 10;
-        else if (smsc_len_b >= 'A' && smsc_len_b <= 'F')
-          smsc_length |= smsc_len_b - 'A' + 10;
+      if (format == MessageFormat::MSG_FMT_PDU) {
+        char smsc_len_b;
+        int smsc_length = 0;
+        for (int i = 0; i <= 1; i++) {
+          smsc_length <<= 4;
+          smsc_len_b = SMS.OutboxMsgContents.charAt(i);
+          if (smsc_len_b >= '0' && smsc_len_b <= '9')
+            smsc_length |= smsc_len_b - '0';
+          else if (smsc_len_b >= 'a' && smsc_len_b <= 'f')
+            smsc_length |= smsc_len_b - 'a' + 10;
+          else if (smsc_len_b >= 'A' && smsc_len_b <= 'F')
+            smsc_length |= smsc_len_b - 'A' + 10;
+        }
+        CMD = "AT+CMGS=";
+        CMD += (SMS.OutboxMsgContents.length() / 2 - (smsc_length + 1));
+        CMD += "\r";
+      } else if (format == MessageFormat::MSG_FMT_TEXT) {
+        CMD = "AT+CMGS=\"" + SMS.OutboxNumber + "\"\r";
       }
-      CMD = "AT+CMGS=";
-      CMD += (SMS.OutboxMsgContents.length() / 2 - (smsc_length + 1));
-      CMD += "\r";
       dte.SendCommand(CMD.c_str(), 15000, "> ");
       state = SEND_CHK_RDY;
     } else
@@ -394,3 +433,5 @@ void ThreadedGSM::Outbox() {
     DEBUG_PRINTLN(state);
   }
 }
+
+void ThreadedGSM::setMessageFormat(MessageFormat fmt) { format = fmt; }

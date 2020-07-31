@@ -6,7 +6,7 @@
 /*   By: Neta Yahav <neta540@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2016/09/20 11:14:02 by Neta Yahav        #+#    #+#             */
-/*   Updated: 2020/07/31 18:36:30 by Neta Yahav       ###   ########.fr       */
+/*   Updated: 2020/07/31 19:04:46 by Neta Yahav       ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -64,6 +64,7 @@ public:
     READ_TYPE_SENT = 3,
     READ_TYPE_ALL = 4
   };
+  enum MessageFormat { MSG_FMT_PDU = 0, MSG_FMT_TEXT = 1 };
   enum IntervalSourceE { INTERVAL_CLOCK, INTERVAL_INBOX, INTERVAL_SIGNAL };
   struct SignalLevel {
     int Dbm;
@@ -72,7 +73,8 @@ public:
 
   typedef void (*ThreadedGSMCallbackSignal)(ThreadedGSM &, SignalLevel &);
   typedef void (*ThreadedGSMCallbackClock)(ThreadedGSM &, NetworkTime &);
-  typedef void (*ThreadedGSMCallbackIncomingSMS)(ThreadedGSM &, String &);
+  typedef void (*ThreadedGSMCallbackIncomingSMS)(ThreadedGSM &, String &,
+                                                 String &);
   typedef void (*ThreadedGSMCallbackBool)(ThreadedGSM &, bool);
   typedef void (*ThreadedGSMCallback)(ThreadedGSM &);
   struct conf {
@@ -122,7 +124,9 @@ private:
 
   struct {
     String InboxMsgContents;
+    String InboxNumber;
     String OutboxMsgContents;
+    String OutboxNumber;
   } SMS;
 
   Stream &stream;
@@ -144,6 +148,7 @@ private:
   int requests;
   int state;
   int job;
+  MessageFormat format;
   // functions
 public:
   ThreadedGSM(Stream &stream);
@@ -151,12 +156,14 @@ public:
   void nextJob();
   void setHandlers(conf config);
   void setInterval(IntervalSourceE source, unsigned long interval);
+  void setMessageFormat(MessageFormat fmt);
   // Initialization
   void begin();
   // Call this function for executing thread
   void loop();
   // Requests
   void sendSMS(String &PDU);
+  void sendTextSMS(String &Number, String &Message);
 
 protected:
 private:
