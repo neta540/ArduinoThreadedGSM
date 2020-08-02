@@ -6,7 +6,7 @@
 /*   By: Neta Yahav <neta540@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/07/31 17:53:23 by Neta Yahav        #+#    #+#             */
-/*   Updated: 2020/07/31 17:59:45 by Neta Yahav       ###   ########.fr       */
+/*   Updated: 2020/08/02 18:43:04 by Neta Yahav       ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,8 @@ DTE::DTE(Stream &stream, unsigned int size)
     : stream(stream), bufferSize(size), result(EXPECT_RESULT) {
   buffer.reserve(size);
 }
+
+DTE::~DTE(){};
 
 void DTE::SendCommand(const char *command, unsigned long timeout,
                       const char *response1, const char *response2,

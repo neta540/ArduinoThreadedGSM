@@ -6,7 +6,7 @@
 /*   By: Neta Yahav <neta540@gmail.com>             +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2016/09/20 15:40:51 by Neta Yahav        #+#    #+#             */
-/*   Updated: 2020/07/31 18:02:19 by Neta Yahav       ###   ########.fr       */
+/*   Updated: 2020/08/02 18:43:03 by Neta Yahav       ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,7 +39,7 @@ private:
   // functions
 public:
   DTE(Stream &stream, unsigned int size);
-  ~DTE(){};
+  ~DTE();
   void SendCommand(const char *command, unsigned long timeout,
                    const char *response1, const char *response2 = 0,
                    const char *response3 = 0);
